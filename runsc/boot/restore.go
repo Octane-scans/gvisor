@@ -25,6 +25,7 @@ import (
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/sys/unix"
+
 	"gvisor.dev/gvisor/pkg/abi/linux"
 	"gvisor.dev/gvisor/pkg/cleanup"
 	"gvisor.dev/gvisor/pkg/context"
@@ -39,6 +40,7 @@ import (
 	"gvisor.dev/gvisor/pkg/sentry/fsimpl/host"
 	"gvisor.dev/gvisor/pkg/sentry/fsimpl/proc"
 	"gvisor.dev/gvisor/pkg/sentry/kernel"
+	"gvisor.dev/gvisor/pkg/sentry/kernel/auth"
 	"gvisor.dev/gvisor/pkg/sentry/pgalloc"
 	"gvisor.dev/gvisor/pkg/sentry/platform"
 	"gvisor.dev/gvisor/pkg/sentry/socket/hostinet"
@@ -204,13 +206,19 @@ func saveOptsFromSpec(spec *specs.Spec, fds []*fd.FD, useCheckpointGofer bool) (
 	return saveOpts, nil
 }
 
-func newProcInternalData(conf *config.Config, spec *specs.Spec) *proc.InternalData {
-	return &proc.InternalData{
+func newProcInternalData(conf *config.Config, spec *specs.Spec, containerName string) *proc.InternalData {
+	data := &proc.InternalData{
 		GVisorMarkerFile:    conf.GVisorMarkerFile,
 		OverrideProcs:       procFiles(conf),
 		SaveTriggerEnabled:  specutils.AnnotationToBool(spec, annotationCheckpointEnable),
 		FSCheckpointEnabled: specutils.AnnotationToBool(spec, annotationFSCheckpointEnable),
+		ContainerName:       containerName,
 	}
+	if spec.Process != nil {
+		data.ContainerUID = auth.KUID(spec.Process.User.UID)
+		data.ContainerGID = auth.KGID(spec.Process.User.GID)
+	}
+	return data
 }
 
 // restorer manages a restore session for a sandbox. It stores information about
@@ -659,6 +667,7 @@ func (r *restorer) restore(l *Loader) error {
 	// Release `l.mu` before calling into callbacks.
 	cu.Clean()
 
+	l.lifecycleCPUs.releaseForRestore()
 	r.timer.Reached("Starting sandbox")
 	if err := r.cm.onStart(); err != nil {
 		return fmt.Errorf("restorer.readyToStart callback failed: %w", err)

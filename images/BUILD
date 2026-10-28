@@ -11,6 +11,7 @@ package(
 filegroup(
     name = "sources",
     srcs = glob(["**"]) + [
+        "//images/basic:sources",
         "//images/gpu/ollama/client:sources",
     ],
 )
@@ -32,15 +33,17 @@ go_binary(
 )
 
 pkg_files(
-    name = "cuda_programs",
+    name = "image_programs",
     srcs = [
         ":cuda_12_8_run_sample",
         ":cuda_run_sample",
+        "//images/gpu/ollama/client",
     ],
     attributes = pkg_attributes(mode = "0755"),
     renames = {
         ":cuda_run_sample": "gpu/cuda-tests/run_sample",
         ":cuda_12_8_run_sample": "gpu/cuda-tests-12-8/run_sample",
+        "//images/gpu/ollama/client": "gpu/ollama/client/client",
     },
 )
 
@@ -51,7 +54,7 @@ pkg_files(
 pkg_tar(
     name = "source_contexts",
     srcs = [
-        ":cuda_programs",
+        ":image_programs",
         ":sources",
     ],
     mode = "0644",

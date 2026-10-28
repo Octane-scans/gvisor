@@ -45,6 +45,12 @@ single_version_override(
     version = "0.63.0",
 )
 
+single_version_override(
+    module_name = "google_benchmark",
+    patch_strip = 1,
+    patches = ["//tools:benchmark-umbrella-exports.patch"],
+)
+
 ### LLVM
 # TODO: try using "llvm-raw" from BCR
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
@@ -104,8 +110,8 @@ new_local_repository(
 
 http_file(
     name = "buildkite_pipeline_schema",
-    sha256 = "3369c58038b4d55c08928affafb653716eb1e7b3cabb4a391aef979dd921f4e1",
-    urls = ["https://raw.githubusercontent.com/buildkite/pipeline-schema/f7a0894074d194bcf19eec5411fec0528f7f4180/schema.json"],
+    sha256 = "c0340a344ebb83f72e4969e09818d945055abe7ac0bb0c49226a60e7d33f84f6",
+    urls = ["https://raw.githubusercontent.com/buildkite/pipeline-schema/3413455899dadd5f721f481ca247bc55e78bf5b9/schema.json"],
 )
 
 http_archive(
@@ -242,9 +248,24 @@ http_file(
 )
 
 ### Docker integration test images
+# LTP provides the standalone fsstress filesystem workload.
+http_archive(
+    name = "ltp",
+    build_file = "//images/basic:ltp.BUILD",
+    sha256 = "b9837481134fa6eabce91c2fba57d96695f81360468f83e11e6982584ad4d29d",
+    strip_prefix = "ltp-full-20260930",
+    urls = ["https://github.com/linux-test-project/ltp/releases/download/20260930/ltp-full-20260930.tar.xz"],
+)
+
 # Pin both architectures of the existing test distributions. Image assembly
 # uses declared layers and does not require a Docker daemon.
 img_pull = use_repo_rule("@rules_img//img:pull.bzl", "pull")
+
+# CI workers share a Docker Hub pull quota. Try the mirror first.
+DOCKER_HUB_REGISTRIES = [
+    "mirror.gcr.io",
+    "index.docker.io",
+]
 
 img_pull(
     name = "test_alpine",
@@ -254,10 +275,7 @@ img_pull(
         "linux/amd64",
         "linux/arm64",
     ],
-    registries = [
-        "mirror.gcr.io",
-        "index.docker.io",
-    ],
+    registries = DOCKER_HUB_REGISTRIES,
     repository = "library/alpine",
     tag = "3.11.5",
 )
@@ -270,10 +288,7 @@ img_pull(
         "linux/amd64",
         "linux/arm64",
     ],
-    registries = [
-        "mirror.gcr.io",
-        "index.docker.io",
-    ],
+    registries = DOCKER_HUB_REGISTRIES,
     repository = "library/busybox",
     tag = "1.31.1",
 )

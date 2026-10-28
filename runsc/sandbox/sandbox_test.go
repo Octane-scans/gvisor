@@ -103,6 +103,12 @@ type fakeCgroup struct {
 	numCPUErr error
 	cpuQuota  int64
 	cpuPeriod int64
+	updates   []specs.LinuxCPU
+}
+
+func (f *fakeCgroup) Update(res *specs.LinuxResources) error {
+	f.updates = append(f.updates, *res.CPU)
+	return nil
 }
 
 func (f *fakeCgroup) NumCPU() (int, error) {
@@ -179,7 +185,7 @@ func TestCalculateCPUNum(t *testing.T) {
 				cpuQuota:  tc.cpuQuota,
 				cpuPeriod: tc.cpuPeriod,
 			}
-			gotNum, gotQuota, gotPeriod, err := calculateCPUNum(cg, tc.limits, tc.cpuNumFromQuota)
+			gotNum, gotQuota, gotPeriod, err := calculateCPUNum(cg, cgroupCPUNum(cg), tc.limits, tc.cpuNumFromQuota)
 			if err != nil {
 				t.Fatalf("calculateCPUNum failed: %v", err)
 			}
@@ -195,6 +201,27 @@ func TestCalculateCPUNum(t *testing.T) {
 			}
 			if gotPeriod != wantPeriod {
 				t.Errorf("calculateCPUNum() got cpuPeriod = %d, want %d", gotPeriod, wantPeriod)
+			}
+		})
+	}
+}
+
+func TestLifecycleCPUNum(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		quota    int64
+		cgCPUNum int
+		want     int
+	}{
+		{name: "uncapped", quota: -1, cgCPUNum: 16, want: 16},
+		{name: "rounds up", quota: 450000, cgCPUNum: 16, want: 5},
+		{name: "fractional CPU", quota: 25000, cgCPUNum: 16, want: 1},
+		{name: "above cgroup CPUs", quota: 800000, cgCPUNum: 4, want: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l := &CPULimits{Lifecycle: specs.LinuxCPU{Quota: new(tc.quota), Period: new(uint64(100000))}}
+			if got := l.lifecycleCPUNum(tc.cgCPUNum); got != tc.want {
+				t.Errorf("lifecycleCPUNum(%d) = %d, want %d", tc.cgCPUNum, got, tc.want)
 			}
 		})
 	}
@@ -297,6 +324,44 @@ func TestNewCPULimits(t *testing.T) {
 			} {
 				if *got.cpu.Quota != got.quota || *got.cpu.Period != tc.wantPeriod {
 					t.Errorf("%s = %d/%d, want %d/%d", got.name, *got.cpu.Quota, *got.cpu.Period, got.quota, tc.wantPeriod)
+				}
+			}
+		})
+	}
+}
+
+func TestMarkCreated(t *testing.T) {
+	limits := &CPULimits{
+		App:       specs.LinuxCPU{Quota: new(int64(25000)), Period: new(uint64(100000))},
+		Creation:  specs.LinuxCPU{Quota: new(int64(-1)), Period: new(uint64(100000))},
+		Lifecycle: specs.LinuxCPU{Quota: new(int64(100000)), Period: new(uint64(100000))},
+	}
+	for _, tc := range []struct {
+		name        string
+		creating    bool
+		wantUpdates int
+	}{
+		{name: "application CPU limit already applied", creating: false, wantUpdates: 0},
+		{name: "creation CPU limit kept for the first container", creating: true, wantUpdates: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cg := &fakeCgroup{}
+			s := &Sandbox{CgroupJSON: cgroup.CgroupJSON{Cgroup: cg}, CPULimits: limits, Creating: tc.creating}
+			// Only the first container to start marks the sandbox as having been created.
+			for range 2 {
+				if err := s.MarkCreated(); err != nil {
+					t.Fatalf("MarkCreated() failed: %v", err)
+				}
+			}
+			if s.Creating {
+				t.Errorf("Creating still set after MarkCreated()")
+			}
+			if len(cg.updates) != tc.wantUpdates {
+				t.Fatalf("MarkCreated() applied %d CPU limits, want %d", len(cg.updates), tc.wantUpdates)
+			}
+			for _, got := range cg.updates {
+				if *got.Quota != *limits.App.Quota || *got.Period != *limits.App.Period {
+					t.Errorf("MarkCreated() applied CPU limit %d/%d, want %d/%d", *got.Quota, *got.Period, *limits.App.Quota, *limits.App.Period)
 				}
 			}
 		})

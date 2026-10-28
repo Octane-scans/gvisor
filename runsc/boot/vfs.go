@@ -1059,14 +1059,14 @@ func getMountNameAndOptions(spec *specs.Spec, conf *config.Config, m *mountInfo,
 		// container runtimes do. Linux and devpts default ptmxmode to 0000.
 		data = []string{"ptmxmode=0666"}
 
-	case dev.Name, cgroup2fs.Name:
+	case dev.Name, devtmpfs.Name, cgroup2fs.Name:
 		// Nothing to do.
 
 	case sentryapi.Nonefs:
 		fsName = sys.Name
 
 	case proc.Name:
-		internalData = newProcInternalData(conf, spec)
+		internalData = newProcInternalData(conf, spec, containerName)
 
 	case sys.Name:
 		sysData := &sys.InternalData{

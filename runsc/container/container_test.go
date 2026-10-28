@@ -888,6 +888,52 @@ func TestGoferWillNeedHostRPC(t *testing.T) {
 	}
 }
 
+// TestSandboxExitBeforeStart checks that if the sandbox exits before the
+// container starts (e.g. because it failed to boot), `start` still reports
+// it as exited, and the container can still be properly destroyed.
+func TestSandboxExitBeforeStart(t *testing.T) {
+	spec, conf := sleepSpecConf(t)
+	rootDir, bundleDir, cleanup, err := testutil.SetupContainer(spec, conf)
+	if err != nil {
+		t.Fatalf("error setting up container: %v", err)
+	}
+	defer cleanup()
+	id := testutil.RandomContainerID()
+	c, err := New(conf, Args{ID: id, Spec: spec, BundleDir: bundleDir})
+	if err != nil {
+		t.Fatalf("error creating container: %v", err)
+	}
+	defer c.Destroy()
+	if err := unix.Kill(c.SandboxPid(), unix.SIGKILL); err != nil {
+		t.Fatalf("error killing sandbox: %v", err)
+	}
+
+	// The sandbox process exits asynchronously.
+	var loaded *Container
+	if err := testutil.Poll(func() error {
+		var err error
+		if loaded, err = Load(rootDir, FullID{ContainerID: id}, LoadOpts{}); err != nil {
+			return &backoff.PermanentError{Err: err}
+		}
+		if got, want := loaded.Status, Stopped; got != want {
+			return fmt.Errorf("container status got %v, want %v", got, want)
+		}
+		return nil
+	}, pollTimeout); err != nil {
+		t.Fatalf("container status check failed: %v", err)
+	}
+	const want = "the sandbox exited before the container started"
+	// loaded is Stopped, while c is still Created.
+	for _, cont := range []*Container{loaded, c} {
+		if err := cont.Start(conf); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("starting %v container got error %v, expected it to contain %q", cont.Status, err, want)
+		}
+	}
+	if err := c.Destroy(); err != nil {
+		t.Errorf("error destroying container: %v", err)
+	}
+}
+
 // Test the we can execute the application with different path formats.
 func TestExePath(t *testing.T) {
 	// Create two directories that will be prepended to PATH.
@@ -2069,7 +2115,7 @@ func TestUnixDomainSockets(t *testing.T) {
 			}
 			defer contRestore.Destroy()
 
-			if err := contRestore.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
+			if err := contRestore.Restore(conf, dir, sandbox.DirectIOOff, false /* background */, nil /* networkArgs */); err != nil {
 				t.Fatalf("error restoring container: %v", err)
 			}
 
@@ -4346,7 +4392,7 @@ func TestUsageFD(t *testing.T) {
 	}
 	defer cont2.Destroy()
 
-	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
+	if err := cont2.Restore(conf, dir, sandbox.DirectIOOff, false /* background */, nil /* networkArgs */); err != nil {
 		t.Fatalf("error restoring container: %v", err)
 	}
 
@@ -5710,7 +5756,7 @@ func TestSpecValidation(t *testing.T) {
 			}
 			defer cont2.Destroy()
 
-			err = cont2.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */)
+			err = cont2.Restore(conf, dir, sandbox.DirectIOOff, false /* background */, nil /* networkArgs */)
 			if err == nil {
 				if test.wantErr == "" {
 					return
@@ -6341,7 +6387,7 @@ func TestSaveRestoreExecReconfigure(t *testing.T) {
 		t.Fatalf("error creating container: %v", err)
 	}
 	defer cont2.Destroy()
-	if err := cont2.Restore(conf, lastImage, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
+	if err := cont2.Restore(conf, lastImage, sandbox.DirectIOOff, false /* background */, nil /* networkArgs */); err != nil {
 		t.Fatalf("error restoring: %v", err)
 	}
 	// Restore does not wait for its hook to finish. Wait before starting another

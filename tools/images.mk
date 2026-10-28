@@ -51,7 +51,11 @@ LOCAL_IMAGE_PREFIX  ?= gvisor.dev/images
 BAZEL_IMAGE_CONTEXTS := \
   basic_alpine=//images/basic:alpine_context \
   basic_busybox=//images/basic:busybox_context \
+  basic_fsstress=//images/basic:fsstress_context \
   basic_tmpfile=//images/basic:tmpfile_context
+ifeq ($(ARCH),x86_64)
+BAZEL_IMAGE_CONTEXTS += benchmarks_syscallbench=//images/benchmarks/syscallbench:syscallbench_context
+endif
 BAZEL_IMAGES        := $(foreach entry,$(BAZEL_IMAGE_CONTEXTS),$(word 1,$(subst =, ,$(entry))))
 ALL_IMAGES          := $(BAZEL_IMAGES) $(subst /,_,$(subst images/,,$(shell find images/ -name Dockerfile -o -name Dockerfile.$(ARCH) | sed 's,/[^/]*$$,,' | sort -u)))
 NON_TEST_IMAGES     := gpu/ollama/bench\|gpu/vllm\|gpu/triton\|tpu/vllm
@@ -271,7 +275,7 @@ $(_image_context_targets):
 .PHONY: $(_image_context_targets)
 
 _cuda_context_options = $(_image_context_options) --@io_bazel_rules_go//go/config:race=false
-_cuda_context_targets := $(foreach op,$(_image_context_operations),$(addprefix $(op)-,gpu_cuda-tests gpu_cuda-tests-12-8))
+_cuda_context_targets := $(foreach op,$(_image_context_operations),$(addprefix $(op)-,gpu_cuda-tests gpu_cuda-tests-12-8 gpu_ollama_client))
 $(_cuda_context_targets):
 	@set -eu; image_context_dir=$$(mktemp -d); trap 'rm -rf "$$image_context_dir"' EXIT; \
 	$(MAKE) --no-print-directory -C "$(dir $(_image_root_makefile))" -f "$(_image_root_makefile)" copy \

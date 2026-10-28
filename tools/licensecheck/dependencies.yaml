@@ -89,10 +89,10 @@
   sha256: 37cdfbc6faefea94f7b37760a305c98c08981116c2bc9e821e3b423221fad8c8
   license: Apache-2.0
 - dependency: buildkite_pipeline_schema
-  version: https://raw.githubusercontent.com/buildkite/pipeline-schema/f7a0894074d194bcf19eec5411fec0528f7f4180/schema.json
-  retrieved: "2026-08-27"
-  commit: f7a0894074d194bcf19eec5411fec0528f7f4180
-  sha256: 3369c58038b4d55c08928affafb653716eb1e7b3cabb4a391aef979dd921f4e1
+  version: https://raw.githubusercontent.com/buildkite/pipeline-schema/3413455899dadd5f721f481ca247bc55e78bf5b9/schema.json
+  retrieved: "2026-10-26"
+  commit: 3413455899dadd5f721f481ca247bc55e78bf5b9
+  sha256: c0340a344ebb83f72e4969e09818d945055abe7ac0bb0c49226a60e7d33f84f6
   license: MIT
 - dependency: cel-spec
   version: https://github.com/google/cel-spec/archive/refs/tags/v0.25.1.tar.gz
@@ -1121,6 +1121,12 @@
   license:
     - Apache-2.0 WITH LLVM-exception
     - MIT
+- dependency: ltp
+  version: https://github.com/linux-test-project/ltp/releases/download/20260930/ltp-full-20260930.tar.xz
+  retrieved: "2026-10-22"
+  commit: 2279d708c817db657611a30c427c7d06c4360049
+  sha256: b9837481134fa6eabce91c2fba57d96695f81360468f83e11e6982584ad4d29d
+  license: GPL-2.0-only
 - dependency: nlohmann_json
   version: https://github.com/nlohmann/json/releases/download/v3.12.0/include.zip
   retrieved: "2026-09-10"

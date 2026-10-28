@@ -7,6 +7,12 @@ package(
     licenses = ["notice"],
 )
 
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+    visibility = ["//images:__pkg__"],
+)
+
 image_manifest(
     name = "alpine",
     base = "@test_alpine",
@@ -29,6 +35,38 @@ image_outputs(
     name = "busybox",
     image = ":busybox",
     image_name = "basic/busybox",
+)
+
+image_layer(
+    name = "fsstress_layer",
+    srcs = {
+        "/run.sh": "fsstress/run.sh",
+        "/usr/bin/fsstress": "@ltp//:fsstress",
+        "/usr/share/doc/fsstress/COPYING": "@ltp//:COPYING",
+    },
+    create_parent_directories = "enabled",
+    default_metadata = file_metadata(mode = "0644"),
+    file_metadata = {
+        "/run.sh": file_metadata(mode = "0755"),
+        "/usr/bin/fsstress": file_metadata(mode = "0755"),
+    },
+    include_runfiles = False,
+)
+
+image_manifest(
+    name = "fsstress",
+    base = "@test_busybox",
+    cmd = [],
+    entrypoint = ["/run.sh"],
+    layers = [":fsstress_layer"],
+    tags = ["manual"],
+    working_dir = "/",
+)
+
+image_outputs(
+    name = "fsstress",
+    image = ":fsstress",
+    image_name = "basic/fsstress",
 )
 
 # The integration test checks that mounting /tmp preserves image contents.
